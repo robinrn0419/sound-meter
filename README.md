@@ -29,3 +29,7 @@ python3 -m http.server 8000
 
 - iPhone：請關閉靜音模式（側邊開關），並把媒體音量調大
 - 先按「試聽」確認；系統語音沒聲音時，改選「內建」
+
+## 致謝
+
+內建語音以 [MeloTTS](https://github.com/myshell-ai/MeloTTS)（MIT License, © 2024 MyShell.ai）透過 sherpa-onnx 合成。
