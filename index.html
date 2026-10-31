@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#EFEBE4">
+<title>分貝計 · Sound Meter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=JetBrains+Mono:wght@400&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EFEBE4;
+    --paper-2:#E6E1D8;
+    --ink:#161513;
+    --ink-2:#2A2825;
+    --concrete:#8C877F;
+    --line:rgba(22,21,19,.12);
+    --oxide:#B4442C;
+    --oxide-lit:#D25A3E;
+    --ease:cubic-bezier(.22,1,.36,1);
+    --spring:cubic-bezier(.34,1.32,.5,1);
+    --serif:"Instrument Serif","Times New Roman",serif;
+    --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --pad:clamp(1.25rem,4vw,3.5rem);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-weight:400;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  button:focus-visible,input:focus-visible{outline:1px solid var(--ink);outline-offset:4px}
+
+  .label{
+    font-family:var(--mono);font-size:.68rem;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--concrete);
+  }
+
+  /* ---------- frame ---------- */
+  .frame{
+    min-height:100%;
+    padding:var(--pad);
+    padding-top:calc(var(--pad) + env(safe-area-inset-top));
+    display:grid;
+    grid-template-columns:repeat(12,minmax(0,1fr));
+    grid-template-rows:auto 1fr auto auto;
+    column-gap:clamp(1rem,2vw,2rem);
+    row-gap:clamp(2.5rem,7vh,6rem);
+  }
+
+  .top{grid-column:1/-1;display:flex;justify-content:space-between;align-items:baseline}
+  .mark{font-weight:500;font-size:.95rem;letter-spacing:.3em}
+  .mark span{margin-left:.9rem;font-family:var(--serif);font-style:italic;font-weight:400;
+    letter-spacing:0;font-size:1.15rem;color:var(--concrete)}
+  .status{display:flex;align-items:center;gap:.6rem}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--concrete);transition:background .6s var(--ease)}
+  body.is-live .dot{background:var(--ink);animation:breathe 2.4s var(--ease) infinite}
+  @keyframes breathe{50%{opacity:.25}}
+
+  /* ---------- reading ---------- */
+  .reading{grid-column:1/9;align-self:end;position:relative}
+  .value{
+    display:flex;align-items:flex-start;
+    font-family:var(--serif);line-height:.78;
+    margin-top:1.4rem;
+  }
+  #db{
+    font-size:clamp(9rem,27vw,23rem);letter-spacing:-.045em;
+    transition:color .5s var(--ease);
+    font-feature-settings:"tnum" 1,"lnum" 1;
+  }
+  body.is-over #db{color:var(--oxide)}
+  .unit{font-size:clamp(1.6rem,3.4vw,2.8rem);font-style:italic;color:var(--concrete);
+    margin:.35em 0 0 .25em}
+
+  .meter{margin-top:clamp(2rem,5vh,3.5rem);position:relative;height:44px}
+  .track{position:absolute;left:0;right:0;top:10px;height:1px;background:var(--line)}
+  .fill{position:absolute;left:0;top:9px;height:3px;width:0;background:var(--ink);
+    transform-origin:left;transition:background .4s var(--ease)}
+  body.is-over .fill{background:var(--oxide)}
+  .peakTick{position:absolute;top:3px;width:1px;height:15px;background:var(--concrete);
+    transition:left .9s var(--ease)}
+  .thr{position:absolute;top:0;height:21px;width:1px;background:var(--oxide);
+    transition:left .7s var(--spring)}
+  .thr::after{content:attr(data-v);position:absolute;top:-1.35rem;left:50%;transform:translateX(-50%);
+    font-family:var(--mono);font-size:.66rem;color:var(--oxide);letter-spacing:.08em}
+  .scale{position:absolute;left:0;right:0;top:28px;display:flex;justify-content:space-between}
+  .scale span{font-family:var(--mono);font-size:.62rem;color:var(--concrete);letter-spacing:.05em}
+
+  /* ---------- side ---------- */
+  .side{
+    grid-column:10/13;align-self:end;
+    display:flex;flex-direction:column;gap:2.6rem;
+    padding-bottom:4.4rem;
+  }
+  .field .label{display:block;margin-bottom:.9rem}
+  .stepper{display:flex;align-items:baseline;gap:1rem}
+  .stepper button{
+    width:2.4rem;height:2.4rem;border-radius:50%;
+    border:1px solid var(--line);font-size:1.1rem;line-height:1;
+    transition:border-color .4s var(--ease),transform .5s var(--spring);
+    align-self:center;
+  }
+  .stepper button:hover{border-color:var(--ink)}
+  .stepper button:active{transform:scale(.88)}
+  .stepper output{font-family:var(--serif);font-size:3.4rem;line-height:1;min-width:2.2ch;text-align:center}
+  .stepper small{font-family:var(--serif);font-style:italic;color:var(--concrete);font-size:1.1rem;margin-left:-.6rem}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:1rem;
+    padding-top:1.6rem;border-top:1px solid var(--line)}
+  .stats b{display:block;font-family:var(--serif);font-weight:400;font-size:2rem;margin-top:.35rem}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:18px;background:transparent;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:1px;background:var(--ink-2);opacity:.35}
+  input[type=range]::-moz-range-track{height:1px;background:rgba(22,21,19,.35)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+    background:var(--ink);margin-top:-6px;transition:transform .4s var(--spring)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:var(--ink)}
+  input[type=range]:active::-webkit-slider-thumb{transform:scale(1.35)}
+  .calibRow{display:flex;justify-content:space-between;align-items:baseline}
+  .calibRow span{font-family:var(--mono);font-size:.72rem}
+
+  .go{
+    position:relative;align-self:flex-start;
+    display:inline-flex;align-items:center;gap:1rem;
+    padding:1.05rem 1.6rem 1.05rem 1.3rem;border-radius:999px;
+    background:var(--ink);color:var(--paper);
+    font-size:.95rem;letter-spacing:.2em;
+    transition:transform .6s var(--spring),background .5s var(--ease);
+  }
+  .go:hover{transform:translateY(-2px)}
+  .go:active{transform:scale(.96)}
+  .go i{width:8px;height:8px;border-radius:50%;background:var(--oxide-lit)}
+  body.is-live .go{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+  body.is-live .go i{border-radius:1px}
+  .err{font-size:.8rem;color:var(--oxide);line-height:1.6;min-height:1.2em;margin-top:-1.6rem}
+
+  /* ---------- history ---------- */
+  .history{grid-column:3/-1;position:relative}
+  .history .label{position:absolute;top:-1.6rem;left:0}
+  .history .label + .label{left:auto;right:0}
+  canvas{display:block;width:100%;height:clamp(90px,14vh,150px)}
+
+  footer{grid-column:1/7;font-size:.78rem;line-height:1.9;color:var(--concrete);max-width:34rem}
+
+  /* ---------- alert overlay ---------- */
+  .alert{
+    position:fixed;inset:0;z-index:10;
+    background:#141311;color:var(--paper);
+    padding:var(--pad);padding-top:calc(var(--pad) + env(safe-area-inset-top));
+    display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
+    grid-template-rows:auto 1fr auto;column-gap:clamp(1rem,2vw,2rem);
+    clip-path:inset(100% 0 0 0);
+    visibility:hidden;
+    transition:clip-path .85s var(--ease),visibility 0s linear .85s;
+  }
+  body.is-alert .alert{clip-path:inset(0 0 0 0);visibility:visible;transition:clip-path .85s var(--ease),visibility 0s}
+  .alert .label{color:#77726A}
+  .a-top{grid-column:1/-1;display:flex;justify-content:space-between}
+  .a-body{grid-column:1/11;align-self:center}
+  .a-warn{
+    font-weight:500;color:var(--oxide-lit);
+    font-size:clamp(4.2rem,15vw,13.5rem);line-height:.92;letter-spacing:.04em;
+  }
+  .a-msg{margin-top:clamp(1.4rem,4vh,2.6rem);font-weight:300;
+    font-size:clamp(1.35rem,3.3vw,2.7rem);letter-spacing:.08em;line-height:1.45}
+  .a-warn,.a-msg{opacity:0;transform:translateY(2.2rem);
+    transition:opacity .7s var(--ease),transform 1s var(--spring)}
+  body.is-alert .a-warn{opacity:1;transform:none;transition-delay:.25s}
+  body.is-alert .a-msg{opacity:1;transform:none;transition-delay:.38s}
+  .alert[data-phase="siren"] .a-warn{animation:flare .44s steps(2,jump-none) infinite}
+  @keyframes flare{50%{color:#7E3322}}
+
+  .a-foot{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:2rem}
+  .a-live{text-align:right}
+  .a-live b{display:block;font-family:var(--serif);font-weight:400;
+    font-size:clamp(3.2rem,8vw,6rem);line-height:.9;margin-top:.5rem}
+  .a-live b em{font-size:.4em;color:#77726A}
+  .a-stop{
+    display:inline-flex;align-items:center;gap:.9rem;
+    padding:1rem 1.5rem;border-radius:999px;
+    box-shadow:inset 0 0 0 1px rgba(239,235,228,.3);
+    letter-spacing:.2em;font-size:.9rem;
+    transition:box-shadow .4s var(--ease),transform .6s var(--spring);
+  }
+  .a-stop:hover{box-shadow:inset 0 0 0 1px var(--paper)}
+  .a-stop:active{transform:scale(.96)}
+  .a-stop i{width:8px;height:8px;border-radius:1px;background:var(--paper)}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:900px){
+    .frame{row-gap:2.8rem}
+    .reading,.side,.history,footer{grid-column:1/-1}
+    .side{padding-bottom:0;display:grid;grid-template-columns:1fr 1fr;gap:2.2rem 1.5rem}
+    .side .stats{grid-column:1/-1}
+    .side .go{grid-column:1/-1}
+    .err{grid-column:1/-1;margin-top:-1.2rem}
+    .a-body{grid-column:1/-1}
+  }
+  @media (max-width:520px){
+    .side{grid-template-columns:1fr}
+    .mark span{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+<main class="frame">
+  <header class="top">
+    <div class="mark">分貝計<span>Sound Meter</span></div>
+    <div class="status"><i class="dot"></i><span class="label" id="statusText">待機</span></div>
+  </header>
+
+  <section class="reading">
+    <span class="label">即時音量 · Fast 125 ms</span>
+    <div class="value"><span id="db">—</span><span class="unit">dB</span></div>
+    <div class="meter" aria-hidden="true">
+      <div class="track"></div>
+      <div class="fill" id="fill"></div>
+      <div class="peakTick" id="peakTick" style="left:0"></div>
+      <div class="thr" id="thrTick"></div>
+      <div class="scale"><span>30</span><span>50</span><span>70</span><span>90</span><span>110</span></div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <div class="field">
+      <span class="label">警告門檻</span>
+      <div class="stepper">
+        <button id="thrDown" aria-label="降低門檻">−</button>
+        <output id="thrOut">70</output><small>dB</small>
+        <button id="thrUp" aria-label="提高門檻">+</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="calibRow"><span class="label">校正偏移</span><span id="calOut">+100</span></div>
+      <input type="range" id="cal" min="60" max="130" step="1" value="100" aria-label="校正偏移">
+    </div>
+
+    <div class="stats">
+      <div><span class="label">最高</span><b id="peak">—</b></div>
+      <div><span class="label">平均</span><b id="avg">—</b></div>
+    </div>
+
+    <button class="go" id="toggle"><i></i><span>開始量測</span></button>
+    <p class="err" id="err" role="alert"></p>
+  </aside>
+
+  <section class="history">
+    <span class="label">近 30 秒</span>
+    <span class="label" id="alertTotal">警告 0 次</span>
+    <canvas id="hist"></canvas>
+  </section>
+
+  <footer>
+    瀏覽器無法取得麥克風的絕對聲壓值，讀數為估算。若有標準分貝計，可調整「校正偏移」使兩者一致。
+    音量超過門檻時會播放警告聲與語音，並在每輪之後重新量測，直到音量低於門檻才停止。
+  </footer>
+</main>
+
+<div class="alert" id="alert" aria-live="assertive" data-phase="">
+  <div class="a-top">
+    <span class="label">Alert · 第 <span id="alertN">1</span> 次</span>
+    <span class="label" id="phaseText">播放警告</span>
+  </div>
+  <div class="a-body">
+    <div class="a-warn">警告警告</div>
+    <p class="a-msg">音量過大，請立即降低聲音。</p>
+  </div>
+  <div class="a-foot">
+    <button class="a-stop" id="stopFromAlert"><i></i>停止量測</button>
+    <div class="a-live">
+      <span class="label">目前 / 門檻 <span id="aThr">70</span> <span style="text-transform:none">dB</span></span>
+      <b><span id="aDb">—</span><em> dB</em></b>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const SPEECH = '警告，警告，音量過大，請立即降低聲音。';
+  const SCALE_MIN = 30, SCALE_MAX = 110;
+  const TAU = 0.125;               // fast time weighting
+  const HIST_LEN = 300;            // 30 s @ 10 Hz
+
+  const store = {
+    get: (k, d) => { const v = parseFloat(localStorage.getItem('sm.' + k)); return Number.isFinite(v) ? v : d; },
+    set: (k, v) => { try { localStorage.setItem('sm.' + k, v); } catch (_) {} }
+  };
+
+  const S = {
+    running: false,
+    alerting: false,
+    threshold: store.get('threshold', 70),
+    offset: store.get('offset', 100),
+    energy: 0,
+    db: 0,
+    peak: -Infinity,
+    sumE: 0, nE: 0,
+    alerts: 0,
+    token: 0,
+  };
+
+  let ctx, stream, analyser, buf, raf, lastT = 0, lastUi = 0, uiMax = 0;
+  let bucket = null;               // raw energy collector for quiet-window sampling
+  let liveNodes = [];
+  let wakeLock = null;
+  let voice = null;
+  const hist = new Float32Array(HIST_LEN).fill(NaN);
+  let histHead = 0;
+
+  /* ---------------- helpers ---------------- */
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const toDb = e => clamp(10 * Math.log10(e + 1e-12) + S.offset, 0, 140);
+  const pct = db => clamp((db - SCALE_MIN) / (SCALE_MAX - SCALE_MIN), 0, 1) * 100;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const body = document.body;
+
+  function renderThreshold() {
+    $('thrOut').textContent = S.threshold;
+    $('aThr').textContent = S.threshold;
+    const t = $('thrTick');
+    t.style.left = pct(S.threshold) + '%';
+    t.dataset.v = S.threshold;
+  }
+  function renderOffset() {
+    $('cal').value = S.offset;
+    $('calOut').textContent = (S.offset >= 0 ? '+' : '') + S.offset;
+  }
+  function setStatus(t) { $('statusText').textContent = t; }
+
+  /* ---------------- voice ---------------- */
+  function pickVoice() {
+    if (!('speechSynthesis' in window)) return;
+    const vs = speechSynthesis.getVoices();
+    voice = vs.find(v => /zh[-_]TW/i.test(v.lang))
+         || vs.find(v => /zh[-_](Hant|HK)/i.test(v.lang))
+         || vs.find(v => /^(zh|cmn)/i.test(v.lang)) || null;
+  }
+  if ('speechSynthesis' in window) {
+    pickVoice();
+    speechSynthesis.addEventListener?.('voiceschanged', pickVoice);
+  }
+
+  function speak() {
+    return new Promise(res => {
+      if (!('speechSynthesis' in window)) return res();
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(SPEECH);
+      u.lang = voice ? voice.lang : 'zh-TW';
+      if (voice) u.voice = voice;
+      u.rate = 1; u.pitch = 1; u.volume = 1;
+      let done = false;
+      const fin = () => { if (done) return; done = true; clearTimeout(guard); res(); };
+      const guard = setTimeout(fin, 9000);
+      u.onend = fin; u.onerror = fin;
+      speechSynthesis.speak(u);
+    });
+  }
+
+  /* ---------------- siren ---------------- */
+  function siren() {
+    return new Promise(res => {
+      const t0 = ctx.currentTime + 0.03;
+      const pulses = 6, step = 0.22;
+      const osc = ctx.createOscillator();
+      const lp = ctx.createBiquadFilter();
+      const g = ctx.createGain();
+      osc.type = 'square';
+      lp.type = 'lowpass'; lp.frequency.value = 2600;
+      osc.connect(lp).connect(g).connect(ctx.destination);
+      g.gain.setValueAtTime(0, t0);
+      for (let i = 0; i < pulses; i++) {
+        const t = t0 + i * step;
+        osc.frequency.setValueAtTime(i % 2 ? 740 : 988, t);
+        g.gain.setTargetAtTime(0.22, t, 0.006);
+        g.gain.setTargetAtTime(0, t + step - 0.05, 0.012);
+      }
+      osc.onended = () => { liveNodes = liveNodes.filter(n => n !== osc); res(); };
+      osc.start(t0);
+      osc.stop(t0 + pulses * step + 0.08);
+      liveNodes.push(osc);
+    });
+  }
+
+  /* listen with no output playing; returns energy-averaged dB of raw frames */
+  async function sampleQuiet() {
+    await wait(220);                 // let the room tail decay
+    bucket = [];
+    await wait(750);
+    const b = bucket; bucket = null;
+    if (!b.length) return S.db;
+    const mean = b.reduce((a, v) => a + v, 0) / b.length;
+    S.energy = mean;                 // re-seed meter so it doesn't re-trigger on the speech tail
+    return toDb(mean);
+  }
+
+  /* ---------------- alert loop ---------------- */
+  async function alertLoop() {
+    const token = ++S.token;
+    const live = () => S.running && token === S.token;
+    S.alerting = true;
+    S.alerts++;
+    $('alertTotal').textContent = `警告 ${S.alerts} 次`;
+    body.classList.add('is-alert');
+    setStatus('警告中');
+    let n = 0;
+
+    while (live()) {
+      $('alertN').textContent = ++n;
+      setPhase('siren', '播放警告');
+      await siren();
+      if (!live()) break;
+      setPhase('speak', '語音提醒');
+      await speak();
+      if (!live()) break;
+      setPhase('listen', '重新量測');
+      const lvl = await sampleQuiet();
+      if (!live()) break;
+      if (lvl < S.threshold) break;
+    }
+
+    if (token === S.token) {
+      S.alerting = false;
+      body.classList.remove('is-alert');
+      setPhase('', '');
+      if (S.running) setStatus('量測中');
+    }
+  }
+  function setPhase(p, t) { $('alert').dataset.phase = p; $('phaseText').textContent = t; }
+
+  /* ---------------- metering ---------------- */
+  function tick(t) {
+    raf = requestAnimationFrame(tick);
+    analyser.getFloatTimeDomainData(buf);
+    let s = 0;
+    for (let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    const ms = s / buf.length;
+    if (bucket) bucket.push(ms);
+
+    const dt = lastT ? Math.min((t - lastT) / 1000, 0.25) : 0.016;
+    lastT = t;
+    S.energy += (ms - S.energy) * (1 - Math.exp(-dt / TAU));
+    S.db = toDb(S.energy);
+    uiMax = Math.max(uiMax, S.db);
+
+    $('fill').style.width = pct(S.db) + '%';
+    body.classList.toggle('is-over', S.db > S.threshold);
+
+    if (!S.alerting) {
+      S.sumE += S.energy; S.nE++;
+      if (S.db > S.peak) S.peak = S.db;
+      if (S.db > S.threshold) alertLoop();
+    }
+
+    if (t - lastUi >= 100) {
+      lastUi = t;
+      const shown = Math.round(S.db);
+      $('db').textContent = shown;
+      $('aDb').textContent = shown;
+      hist[histHead] = uiMax; histHead = (histHead + 1) % HIST_LEN; uiMax = 0;
+      if (Number.isFinite(S.peak)) {
+        $('peak').textContent = Math.round(S.peak);
+        $('peakTick').style.left = pct(S.peak) + '%';
+      }
+      if (S.nE) $('avg').textContent = Math.round(toDb(S.sumE / S.nE));
+      drawHistory();
+    }
+  }
+
+  /* ---------------- history canvas ---------------- */
+  const cv = $('hist'), g2 = cv.getContext('2d');
+  function sizeCanvas() {
+    const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+    cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+    g2.setTransform(d, 0, 0, d, 0, 0);
+    drawHistory();
+  }
+  function drawHistory() {
+    const w = cv.clientWidth, h = cv.clientHeight;
+    g2.clearRect(0, 0, w, h);
+    const y = db => h - pct(db) / 100 * h;
+    const ty = y(S.threshold);
+
+    // baseline + threshold
+    g2.strokeStyle = 'rgba(22,21,19,.12)'; g2.lineWidth = 1; g2.setLineDash([]);
+    g2.beginPath(); g2.moveTo(0, h - .5); g2.lineTo(w, h - .5); g2.stroke();
+    g2.strokeStyle = 'rgba(180,68,44,.55)'; g2.setLineDash([2, 4]);
+    g2.beginPath(); g2.moveTo(0, ty); g2.lineTo(w, ty); g2.stroke();
+    g2.setLineDash([]);
+
+    const path = new Path2D(); let started = false;
+    for (let i = 0; i < HIST_LEN; i++) {
+      const v = hist[(histHead + i) % HIST_LEN];
+      if (!Number.isFinite(v)) { started = false; continue; }
+      const x = i / (HIST_LEN - 1) * w, yy = y(v);
+      started ? path.lineTo(x, yy) : path.moveTo(x, yy); started = true;
+    }
+    g2.lineWidth = 1.25; g2.lineJoin = 'round';
+    g2.save(); g2.beginPath(); g2.rect(0, ty, w, h); g2.clip();
+    g2.strokeStyle = '#161513'; g2.stroke(path); g2.restore();
+    g2.save(); g2.beginPath(); g2.rect(0, 0, w, ty); g2.clip();
+    g2.strokeStyle = '#B4442C'; g2.stroke(path); g2.restore();
+  }
+  addEventListener('resize', sizeCanvas);
+
+  /* ---------------- start / stop ---------------- */
+  async function start() {
+    $('err').textContent = '';
+    if (!navigator.mediaDevices?.getUserMedia) {
+      $('err').textContent = '此瀏覽器不支援麥克風存取，請改用 HTTPS 開啟或更換瀏覽器。';
+      return;
+    }
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+    } catch (e) {
+      $('err').textContent = '無法取得麥克風權限，請在瀏覽器設定中允許後再試一次。';
+      return;
+    }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    buf = new Float32Array(analyser.fftSize);
+    ctx.createMediaStreamSource(stream).connect(analyser);
+
+    // unlock speech on iOS within the user gesture
+    if ('speechSynthesis' in window) {
+      const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u);
+    }
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) {}
+
+    Object.assign(S, { running: true, energy: 0, peak: -Infinity, sumE: 0, nE: 0 });
+    lastT = 0;
+    body.classList.add('is-live');
+    $('toggle').lastElementChild.textContent = '停止量測';
+    setStatus('量測中');
+    raf = requestAnimationFrame(tick);
+  }
+
+  function stop() {
+    S.running = false; S.alerting = false; S.token++;
+    cancelAnimationFrame(raf);
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+    liveNodes.forEach(n => { try { n.stop(); } catch (_) {} }); liveNodes = [];
+    stream?.getTracks().forEach(t => t.stop());
+    ctx?.close();
+    wakeLock?.release?.(); wakeLock = null;
+    body.classList.remove('is-live', 'is-alert', 'is-over');
+    $('toggle').lastElementChild.textContent = '開始量測';
+    $('fill').style.width = '0';
+    setStatus('待機');
+  }
+
+  $('toggle').addEventListener('click', () => S.running ? stop() : start());
+  $('stopFromAlert').addEventListener('click', stop);
+
+  const nudge = d => {
+    S.threshold = clamp(S.threshold + d, 40, 120);
+    store.set('threshold', S.threshold);
+    renderThreshold(); drawHistory();
+  };
+  $('thrDown').addEventListener('click', () => nudge(-1));
+  $('thrUp').addEventListener('click', () => nudge(1));
+  $('cal').addEventListener('input', e => {
+    S.offset = +e.target.value; store.set('offset', S.offset); renderOffset();
+  });
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && S.running && !wakeLock) {
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch (_) {}
+    }
+  });
+
+  renderThreshold(); renderOffset(); sizeCanvas();
+})();
+</script>
+</body>
+</html>
